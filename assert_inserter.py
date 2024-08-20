@@ -9,11 +9,12 @@ logger = logging.getLogger(__name__)
 class AssertInserter(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
         logger.info(f"Analyzing function: {node.name}")
+        new_body = []
 
         # Insert an assertion at the start of the function to check inputs
         if node.args.args:  # If the function has arguments
             for arg in node.args.args:
-                if arg.annotation:  # Insert assertion only if type is annotated
+                if isinstance(arg, ast.arg):
                     assert_stmt = ast.Assert(
                         test=ast.Compare(
                             left=ast.Name(id=arg.arg, ctx=ast.Load()),
@@ -22,15 +23,16 @@ class AssertInserter(ast.NodeTransformer):
                         ),
                         msg=ast.Constant(value=f"{arg.arg} should not be None")
                     )
-                    node.body.insert(0, assert_stmt)
-                    logger.info(f"  - Inserted assert statement at line {node.lineno + 1}: {arg.arg} should not be None")
+                    new_body.append(assert_stmt)
+                    logger.info(f"  - Inserted assert statement at start of function: {arg.arg} should not be None")
         
         # Visit and modify the rest of the function body
-        self.generic_visit(node)
+        for stmt in node.body:
+            new_body.append(self.visit(stmt))
         
         # Insert an assertion at the end of the function for postconditions
-        if isinstance(node.body[-1], ast.Return):
-            return_value = node.body[-1].value
+        if isinstance(new_body[-1], ast.Return):
+            return_value = new_body[-1].value
             assert_stmt = ast.Assert(
                 test=ast.Compare(
                     left=return_value,
@@ -39,12 +41,14 @@ class AssertInserter(ast.NodeTransformer):
                 ),
                 msg=ast.Constant(value="Return value should not be None")
             )
-            node.body.insert(-1, assert_stmt)
-            logger.info(f"  - Inserted assert statement before return at line {node.body[-1].lineno}")
-
+            new_body.insert(-1, assert_stmt)
+            logger.info(f"  - Inserted assert statement before return: Return value should not be None")
+        
+        node.body = new_body
         return node
 
     def visit_Assign(self, node):
+        logger.info(f"  - Found assignment at line {node.lineno}")
         # Insert assertions after assignments to check critical state transitions
         if isinstance(node.targets[0], ast.Name):
             target = node.targets[0].id
@@ -56,7 +60,7 @@ class AssertInserter(ast.NodeTransformer):
                 ),
                 msg=ast.Constant(value=f"{target} should not be None after assignment")
             )
-            logger.info(f"  - Found assignment to {target} at line {node.lineno}")
+            logger.info(f"  - Inserted assert statement after assignment: {target} should not be None")
             return [node, assert_stmt]
         return node
 
@@ -75,7 +79,7 @@ class AssertInserter(ast.NodeTransformer):
                     msg=ast.Constant(value="Unhandled exception occurred")
                 )
                 handler.body.append(assert_stmt)
-                logger.info(f"  - Inserted assert statement in except block at line {handler.lineno}")
+                logger.info(f"  - Inserted assert statement in except block: Unhandled exception occurred")
         return node
 
 # Example code to analyze and modify
