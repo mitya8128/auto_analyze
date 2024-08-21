@@ -89,36 +89,39 @@ class AssertInserter(ast.NodeTransformer):
 
 
 def process_file(filepath):
-    with open(filepath, 'r') as file:
-        code = file.read()
+    try:
+        with open(filepath, 'r') as file:
+            code = file.read()
 
-    # Parse the code into an AST
-    tree = ast.parse(code)
+        # Parse the code into an AST
+        tree = ast.parse(code)
 
-    # Apply the AssertInserter to the AST
-    transformer = AssertInserter()
-    transformed_tree = transformer.visit(tree)
+        # Apply the AssertInserter to the AST
+        transformer = AssertInserter()
+        transformed_tree = transformer.visit(tree)
 
-    # Convert the modified AST back to source code
-    modified_code = astor.to_source(transformed_tree)
+        # Convert the modified AST back to source code
+        modified_code = astor.to_source(transformed_tree)
 
-    # Save the modified code back to a new file
-    filename = os.path.splitext(os.path.basename(filepath))[0] + '_modified.py'
-    new_filepath = os.path.join(os.path.dirname(filepath), filename)
-    with open(new_filepath, 'w') as file:
-        file.write(modified_code)
+        # Save the modified code back to a new file
+        filename = os.path.splitext(os.path.basename(filepath))[0] + '_modified.py'
+        new_filepath = os.path.join(os.path.dirname(filepath), filename)
+        with open(new_filepath, 'w') as file:
+            file.write(modified_code)
 
-    logger.info(f"Modified code saved to {new_filepath}")
+        logger.info(f"Modified code saved to {new_filepath}")
 
-    # Run CrossHair on the new file and capture the output
-    logger.info(f"Running CrossHair on {new_filepath}")
-    result = subprocess.run(['crosshair', 'check', new_filepath], capture_output=True, text=True)
+        # Run CrossHair on the new file and capture the output
+        logger.info(f"Running CrossHair on {new_filepath}")
+        result = subprocess.run(['crosshair', 'check', new_filepath], capture_output=True, text=True)
 
-    # Log the output to both logger and terminal
-    logger.info(result.stdout)
-    logger.error(result.stderr)
-    print(result.stdout)
-    print(result.stderr)
+        # Log the output to both logger and terminal
+        logger.info(f"CrossHair output for {new_filepath}:\n{result.stdout}")
+        if result.stderr:
+            logger.error(f"CrossHair errors for {new_filepath}:\n{result.stderr}")
+
+    except Exception as e:
+        logger.error(f"Failed to process {filepath}: {e}")
 
 
 def analyze_directory(directory):
