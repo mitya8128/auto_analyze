@@ -1,6 +1,8 @@
 import ast
 import astor  # To convert AST back to source code
 import logging
+import subprocess
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -84,7 +86,16 @@ class AssertInserter(ast.NodeTransformer):
 
 # Example code to analyze and modify
 code = """
-def process_transaction(account, amount):
+from typing import Union
+
+
+class Account:
+    balance: Union[int, float]
+
+global account
+account = Account()
+
+def process_transaction(account: Account, amount: Union[int, float]) -> Union[int, float]:
     if account.balance < amount:
         raise ValueError("Insufficient funds")
     account.balance -= amount
@@ -103,3 +114,25 @@ modified_code = astor.to_source(transformed_tree)
 print('================================================================')
 print('result:')
 print(modified_code)
+print('================================================================')
+
+# Get the function name to name the file
+function_name = transformer.function_name if hasattr(transformer, 'function_name') else 'modified_code'
+filename = f"{function_name}.py"
+
+# Write the modified code to a new file
+with open(filename, 'w') as f:
+    f.write(modified_code)
+
+logger.info(f"Modified code saved to {filename}")
+
+# Run CrossHair on the new file and capture the output
+logger.info(f"Running CrossHair on {filename}")
+result = subprocess.run(['crosshair', 'check', '--analysis_kind', 'asserts',
+                         filename], capture_output=True, text=True)
+
+# Log the output to both logger and terminal
+logger.info(result.stdout)
+logger.error(result.stderr)
+print(result.stdout)
+print(result.stderr)
