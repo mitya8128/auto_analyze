@@ -2,11 +2,13 @@ import ast
 import astor  # To convert AST back to source code
 import logging
 import subprocess
+import os
 
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
 
 class AssertInserter(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
@@ -84,55 +86,51 @@ class AssertInserter(ast.NodeTransformer):
                 logger.info(f"  - Inserted assert statement in except block: Unhandled exception occurred")
         return node
 
-# Example code to analyze and modify
-code = """
-from typing import Union
+
+def process_file(filepath):
+    try:
+        with open(filepath, 'r') as file:
+            code = file.read()
+
+        # Parse the code into an AST
+        tree = ast.parse(code)
+
+        # Apply the AssertInserter to the AST
+        transformer = AssertInserter()
+        transformed_tree = transformer.visit(tree)
+
+        # Convert the modified AST back to source code
+        modified_code = astor.to_source(transformed_tree)
+        
+        logger.info(f"\n===========================================================\n")
+        logger.info(f"\nModified code:\n\n{modified_code}\n")
+        # Save the modified code back to a new file
+        filename = os.path.splitext(os.path.basename(filepath))[0] + '_modified.py'
+        new_filepath = os.path.join(os.path.dirname(filepath), filename)
+        with open(new_filepath, 'w') as file:
+            file.write(modified_code)
+        
+        logger.info(f"\n===========================================================\n")
+        logger.info(f"Modified code saved to {new_filepath}")
+
+        # Run CrossHair on the new file and capture the output
+        logger.info(f"Running CrossHair on {new_filepath}")
+        result = subprocess.run(['crosshair', 'check', '--analysis_kind', 'asserts', 
+                                 new_filepath], capture_output=True, text=True)
+
+        # Log the output to both logger and terminal
+        logger.info(f"CrossHair output for {new_filepath}:\n{result.stdout}")
+        if result.stderr:
+            logger.error(f"CrossHair errors for {new_filepath}:\n{result.stderr}")
+
+    except Exception as e:
+        logger.error(f"Failed to process {filepath}: {e}")
 
 
-class Account:
-    balance: Union[int, float]
-
-global account
-account = Account()
-
-def process_transaction(account: Account, amount: Union[int, float]) -> Union[int, float]:
-    if account.balance < amount:
-        raise ValueError("Insufficient funds")
-    account.balance -= amount
-    return account.balance
-"""
-
-# Parse the code into an AST
-tree = ast.parse(code)
-
-# Apply the AssertInserter to the AST
-transformer = AssertInserter()
-transformed_tree = transformer.visit(tree)
-
-# Convert the modified AST back to source code
-modified_code = astor.to_source(transformed_tree)
-print('================================================================')
-print('result:')
-print(modified_code)
-print('================================================================')
-
-# Get the function name to name the file
-function_name = transformer.function_name if hasattr(transformer, 'function_name') else 'modified_code'
-filename = f"{function_name}.py"
-
-# Write the modified code to a new file
-with open(filename, 'w') as f:
-    f.write(modified_code)
-
-logger.info(f"Modified code saved to {filename}")
-
-# Run CrossHair on the new file and capture the output
-logger.info(f"Running CrossHair on {filename}")
-result = subprocess.run(['crosshair', 'check', '--analysis_kind', 'asserts',
-                         filename], capture_output=True, text=True)
-
-# Log the output to both logger and terminal
-logger.info(result.stdout)
-logger.error(result.stderr)
-print(result.stdout)
-print(result.stderr)
+def analyze_directory(directory):
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.py'):
+                filepath = os.path.join(root, file)
+                logger.info(f"Processing file: {filepath}")
+                process_file(filepath)
