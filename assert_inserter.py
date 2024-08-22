@@ -3,7 +3,6 @@ import astor  # To convert AST back to source code
 import logging
 import subprocess
 import os
-import argparse
 
 
 # Setup logging
@@ -102,18 +101,22 @@ def process_file(filepath):
 
         # Convert the modified AST back to source code
         modified_code = astor.to_source(transformed_tree)
-
+        
+        logger.info(f"\n===========================================================\n")
+        logger.info(f"\nModified code:\n\n{modified_code}\n")
         # Save the modified code back to a new file
         filename = os.path.splitext(os.path.basename(filepath))[0] + '_modified.py'
         new_filepath = os.path.join(os.path.dirname(filepath), filename)
         with open(new_filepath, 'w') as file:
             file.write(modified_code)
-
+        
+        logger.info(f"\n===========================================================\n")
         logger.info(f"Modified code saved to {new_filepath}")
 
         # Run CrossHair on the new file and capture the output
         logger.info(f"Running CrossHair on {new_filepath}")
-        result = subprocess.run(['crosshair', 'check', new_filepath], capture_output=True, text=True)
+        result = subprocess.run(['crosshair', 'check', '--analysis_kind', 'asserts', 
+                                 new_filepath], capture_output=True, text=True)
 
         # Log the output to both logger and terminal
         logger.info(f"CrossHair output for {new_filepath}:\n{result.stdout}")
