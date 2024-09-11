@@ -15,47 +15,84 @@ class AssertInserter(ast.NodeTransformer):
         logger.info(f"Analyzing function: {node.name}")
         new_body = []
 
-        # Insert an assertion at the start of the function to check inputs
+        # Insert assertions based on type hints (if available)
         if node.args.args:  # If the function has arguments
             for arg in node.args.args:
                 if isinstance(arg, ast.arg):
-                    assert_stmt = ast.Assert(
-                        test=ast.Compare(
-                            left=ast.Name(id=arg.arg, ctx=ast.Load()),
-                            ops=[ast.IsNot()],
-                            comparators=[ast.Constant(value=None)]
-                        ),
-                        msg=ast.Constant(value=f"{arg.arg} should not be None")
-                    )
-                    new_body.append(assert_stmt)
-                    logger.info(f"  - Inserted assert statement at start of function: {arg.arg} should not be None")
-        
+                    # Check if the argument has a type annotation
+                    arg_type = arg.annotation.id if arg.annotation and isinstance(arg.annotation, ast.Name) else None
+                    if arg_type:
+                        # Insert type check based on the annotation
+                        assert_stmt = ast.Assert(
+                            test=ast.Call(
+                                func=ast.Name(id='isinstance', ctx=ast.Load()),
+                                args=[
+                                    ast.Name(id=arg.arg, ctx=ast.Load()),
+                                    ast.Name(id=arg_type, ctx=ast.Load())  # Check if the argument matches its type
+                                ],
+                                keywords=[]
+                            ),
+                            msg=ast.Constant(value=f"{arg.arg} should be of type {arg_type}")
+                        )
+                        new_body.append(assert_stmt)
+                        logger.info(f"  - Inserted type check for {arg.arg}: expected type {arg_type}")
+                    else:
+                        # Insert a general check for None if no type is specified
+                        assert_stmt = ast.Assert(
+                            test=ast.Compare(
+                                left=ast.Name(id=arg.arg, ctx=ast.Load()),
+                                ops=[ast.IsNot()],
+                                comparators=[ast.Constant(value=None)]
+                            ),
+                            msg=ast.Constant(value=f"{arg.arg} should not be None")
+                        )
+                        new_body.append(assert_stmt)
+                        logger.info(f"  - Inserted None check for {arg.arg}")
+
         # Visit and modify the rest of the function body
         for stmt in node.body:
             new_body.append(self.visit(stmt))
-        
-        # Insert an assertion at the end of the function for postconditions
+
+        # Insert assertions for return type based on annotations (if available)
         if isinstance(new_body[-1], ast.Return):
             return_value = new_body[-1].value
-            assert_stmt = ast.Assert(
-                test=ast.Compare(
-                    left=return_value,
-                    ops=[ast.IsNot()],
-                    comparators=[ast.Constant(value=None)]
-                ),
-                msg=ast.Constant(value="Return value should not be None")
-            )
-            new_body.insert(-1, assert_stmt)
-            logger.info(f"  - Inserted assert statement before return: Return value should not be None")
-        
+            if node.returns:
+                return_type = node.returns.id if isinstance(node.returns, ast.Name) else None
+                if return_type:
+                    assert_stmt = ast.Assert(
+                        test=ast.Call(
+                            func=ast.Name(id='isinstance', ctx=ast.Load()),
+                            args=[
+                                return_value,
+                                ast.Name(id=return_type, ctx=ast.Load())  # Check if return value matches its type
+                            ],
+                            keywords=[]
+                        ),
+                        msg=ast.Constant(value=f"Return value should be of type {return_type}")
+                    )
+                    logger.info(f"  - Inserted return type check: expected {return_type}")
+                else:
+                    # General check for None return if no type annotation is provided
+                    assert_stmt = ast.Assert(
+                        test=ast.Compare(
+                            left=return_value,
+                            ops=[ast.IsNot()],
+                            comparators=[ast.Constant(value=None)]
+                        ),
+                        msg=ast.Constant(value="Return value should not be None")
+                    )
+                    logger.info("  - Inserted general None check for return value")
+                new_body.insert(-1, assert_stmt)
+
         node.body = new_body
         return node
 
     def visit_Assign(self, node):
         logger.info(f"  - Found assignment at line {node.lineno}")
-        # Insert assertions after assignments to check critical state transitions
+        # Insert assertions after assignments for critical state transitions
         if isinstance(node.targets[0], ast.Name):
             target = node.targets[0].id
+            # Generalize the check to cover basic cases or rely on external rules
             assert_stmt = ast.Assert(
                 test=ast.Compare(
                     left=ast.Name(id=target, ctx=ast.Load()),
@@ -64,7 +101,7 @@ class AssertInserter(ast.NodeTransformer):
                 ),
                 msg=ast.Constant(value=f"{target} should not be None after assignment")
             )
-            logger.info(f"  - Inserted assert statement after assignment: {target} should not be None")
+            logger.info(f"  - Inserted general None check after assignment for {target}")
             return [node, assert_stmt]
         return node
 

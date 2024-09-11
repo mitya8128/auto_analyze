@@ -12,3 +12,8 @@ for analysis of single .py file:
   
 for analysis of project directory:  
 `python analysis_directory.py <path to directory>`
+
+#### Notes  
+- Checks for Python type hints in function arguments and return types.  
+- If a type hint is present, it inserts a corresponding isinstance check.  
+- If no type hints are provided, the tool falls back to a general None check.  
