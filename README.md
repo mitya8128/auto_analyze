@@ -17,3 +17,4 @@ for analysis of project directory:
 - Checks for Python type hints in function arguments and return types.  
 - If a type hint is present, it inserts a corresponding isinstance check.  
 - If no type hints are provided, the tool falls back to a general None check.  
+- So, consequently, additionally to CrossHair checks, it could serve as additional python type-checking tool
