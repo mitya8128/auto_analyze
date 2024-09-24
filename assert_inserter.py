@@ -19,6 +19,10 @@ class AssertInserter(ast.NodeTransformer):
         if node.args.args:  # If the function has arguments
             for arg in node.args.args:
                 if isinstance(arg, ast.arg):
+                    # Skip checking `self` for None
+                    if arg.arg == "self":
+                        continue
+                    
                     # Check if the argument has a type annotation
                     arg_type = arg.annotation.id if arg.annotation and isinstance(arg.annotation, ast.Name) else None
                     if arg_type:
@@ -85,42 +89,6 @@ class AssertInserter(ast.NodeTransformer):
                 new_body.insert(-1, assert_stmt)
 
         node.body = new_body
-        return node
-
-    def visit_Assign(self, node):
-        logger.info(f"  - Found assignment at line {node.lineno}")
-        # Insert assertions after assignments for critical state transitions
-        if isinstance(node.targets[0], ast.Name):
-            target = node.targets[0].id
-            # Generalize the check to cover basic cases or rely on external rules
-            assert_stmt = ast.Assert(
-                test=ast.Compare(
-                    left=ast.Name(id=target, ctx=ast.Load()),
-                    ops=[ast.IsNot()],
-                    comparators=[ast.Constant(value=None)]
-                ),
-                msg=ast.Constant(value=f"{target} should not be None after assignment")
-            )
-            logger.info(f"  - Inserted general None check after assignment for {target}")
-            return [node, assert_stmt]
-        return node
-
-    def visit_If(self, node):
-        logger.info(f"  - Found if statement at line {node.lineno}")
-        self.generic_visit(node)
-        return node
-
-    def visit_Try(self, node):
-        logger.info(f"  - Found try-except block at line {node.lineno}")
-        self.generic_visit(node)
-        for handler in node.handlers:
-            if isinstance(handler.type, ast.Name) and handler.type.id == 'Exception':
-                assert_stmt = ast.Assert(
-                    test=ast.Constant(value=False),
-                    msg=ast.Constant(value="Unhandled exception occurred")
-                )
-                handler.body.append(assert_stmt)
-                logger.info(f"  - Inserted assert statement in except block: Unhandled exception occurred")
         return node
 
 
