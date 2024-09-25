@@ -41,7 +41,6 @@ def process_transaction(account: Account, amount: Union[int, float]) ->Union[
 command python analyse_file.py <`test_snippet.py`>  returns  
 ```
 Analyzing function: __init__
-  - Inserted None check for self
   - Inserted None check for balance
   - Found assignment at line 7
 Analyzing function: process_transaction
@@ -61,7 +60,6 @@ from typing import Union
 class Account:
 
     def __init__(self, balance: Union[int, float]):
-        assert self is not None, 'self should not be None'
         assert balance is not None, 'balance should not be None'
         self.balance = balance
 

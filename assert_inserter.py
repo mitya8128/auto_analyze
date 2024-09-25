@@ -19,6 +19,10 @@ class AssertInserter(ast.NodeTransformer):
         if node.args.args:  # If the function has arguments
             for arg in node.args.args:
                 if isinstance(arg, ast.arg):
+                    # Skip checking `self` for None
+                    if arg.arg == "self":
+                        continue
+                    
                     # Check if the argument has a type annotation
                     arg_type = arg.annotation.id if arg.annotation and isinstance(arg.annotation, ast.Name) else None
                     if arg_type:
